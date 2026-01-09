@@ -2,12 +2,13 @@ version: '3'
 
 services:
   alist-sync-web:
-    image: xjxjin/alist-sync:latest
+    build: .
+    image: alist-sync:latest
     container_name: alist-sync
     restart: unless-stopped
     ports:
       - "52441:52441"
     volumes:
-      - /DATA/AppData/alist-sync/data:/app/data
+      - ./data:/app/data
     environment:
-      - TZ=Asia/Shanghai 
+      - TZ=Asia/Shanghai

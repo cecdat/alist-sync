@@ -7,7 +7,41 @@ import logging
 from typing import List, Dict, Optional, Union
 from logging.handlers import TimedRotatingFileHandler
 from typing import List, Tuple, Pattern
+import urllib.request
+import urllib.parse
+import ssl
 
+def send_bark_notification(title: str, content: str, key: str, url: str = None) -> None:
+    """发送Bark通知"""
+    if not key:
+        return
+        
+    try:
+        if not url:
+            url = "https://api.day.app"
+        
+        # 移除url末尾的斜杠
+        url = url.rstrip('/')
+        
+        # 构建请求URL
+        encoded_title = urllib.parse.quote(title)
+        encoded_content = urllib.parse.quote(content)
+        request_url = f"{url}/{key}/{encoded_title}/{encoded_content}"
+        
+        # 发送请求
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        
+        with urllib.request.urlopen(request_url, context=ctx, timeout=10) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            if result.get('code') == 200:
+                logger.info(f"Bark推送成功: {title}")
+            else:
+                logger.error(f"Bark推送失败: {result}")
+                
+    except Exception as e:
+        logger.error(f"发送Bark通知出错: {str(e)}")
 
 def setup_logger():
     """配置日志记录器"""
@@ -120,13 +154,31 @@ class AlistSync:
             raise
 
     def _make_request(self, method: str, path: str, headers: Dict = None,
-                      payload: str = None) -> Optional[Dict]:
+                      payload: Union[str, bytes] = None) -> Optional[Dict]:
         """发送HTTP请求并返回JSON响应"""
         try:
             logger.debug(f"发送请求 - 方法: {method}, 路径: {path}")
+            
+            # 确保 headers 包含 charset
+            if headers is not None and "Content-Type" in headers:
+                if "charset" not in headers["Content-Type"]:
+                    headers["Content-Type"] += "; charset=utf-8"
+            
+            # 确保 payload 是 bytes
+            if payload and isinstance(payload, str):
+                payload = payload.encode('utf-8')
+                
             self.connection.request(method, path, body=payload, headers=headers)
             response = self.connection.getresponse()
-            result = json.loads(response.read().decode("utf-8"))
+            # 读取响应并解码
+            response_data = response.read()
+            # 尝试解码，如果失败则记录错误但返回原始内容（如果不是 JSON 解析会失败）
+            try:
+                result = json.loads(response_data.decode("utf-8"))
+            except UnicodeDecodeError:
+                # 某些情况下可能并没有返回 utf-8，尝试其他编码或忽略错误
+                 result = json.loads(response_data.decode("utf-8", errors="replace"))
+
             logger.debug(f"请求响应: {result}")
             return result
         except Exception as e:
@@ -144,7 +196,7 @@ class AlistSync:
             logger.error("token或用户名密码不正确")
             return False
 
-        payload = json.dumps({"username": self.username, "password": self.password})
+        payload = json.dumps({"username": self.username, "password": self.password}, ensure_ascii=False)
         headers = {
             "User-Agent": "Apifox/1.0.0 (https://apifox.com)",
             "Content-Type": "application/json"
@@ -189,7 +241,7 @@ class AlistSync:
             "User-Agent": "Apifox/1.0.0 (https://apifox.com)",
             "Content-Type": "application/json"
         }
-        payload = json.dumps(kwargs)
+        payload = json.dumps(kwargs, ensure_ascii=False)
         path = f"/api/fs/{operation}"
         return self._make_request("POST", path, headers, payload)
 
@@ -204,7 +256,7 @@ class AlistSync:
             "User-Agent": "Apifox/1.0.0 (https://apifox.com)",
             "Content-Type": "application/json"
         }
-        payload = json.dumps(kwargs)
+        payload = json.dumps(kwargs, ensure_ascii=False)
         path = f"/api/admin/task/{operation}"
         return self._make_request(method, path, headers, payload)
 
@@ -576,6 +628,10 @@ def main(dir_pairs: str = None, sync_del_action: str = None, exclude_dirs: str =
     username = os.environ.get("USERNAME")
     password = os.environ.get("PASSWORD")
     token = os.environ.get("TOKEN")  # 添加token环境变量
+    
+    # 获取Bark配置
+    bark_key = os.environ.get("BARK_KEY")
+    bark_url = os.environ.get("BARK_URL")
 
     # 是否删除目标目录多余文件
     if sync_del_action:
@@ -636,6 +692,9 @@ def main(dir_pairs: str = None, sync_del_action: str = None, exclude_dirs: str =
 
     logger.info(
         f"配置信息 - URL: {base_url}, 用户名: {username}, 删除动作: {sync_delete_action}, 删除源目录: {move_file_action}")
+        
+    # 发送任务开始通知
+    send_bark_notification("Alist-Sync", "任务开始执行", bark_key, bark_url)
 
     # 创建AlistSync实例时添加token参数
     alist_sync = AlistSync(base_url, username, password, token, sync_delete_action, exclude_list, move_file_action,
@@ -643,6 +702,7 @@ def main(dir_pairs: str = None, sync_del_action: str = None, exclude_dirs: str =
     # 验证 token 是否正确
     if not alist_sync.login():
         logger.error("令牌或用户名密码不正确")
+        send_bark_notification("Alist-Sync", "任务执行失败：认证未通过", bark_key, bark_url)
         return False
     try:
         # 获取同步目录对
@@ -675,8 +735,11 @@ def main(dir_pairs: str = None, sync_del_action: str = None, exclude_dirs: str =
             alist_sync.sync_directories(src_dir.strip(), dst_dir.strip())
 
         logger.info("所有同步任务执行完成")
+        send_bark_notification("Alist-Sync", "所有同步任务执行完成", bark_key, bark_url)
     except Exception as e:
-        logger.error(f"执行同步任务时发生错误: {str(e)}")
+        error_msg = f"执行同步任务时发生错误: {str(e)}"
+        logger.error(error_msg)
+        send_bark_notification("Alist-Sync", error_msg, bark_key, bark_url)
     finally:
         alist_sync.close()
         logger.info("关闭连接，任务结束")

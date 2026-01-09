@@ -297,7 +297,11 @@
 		<form class="layui-form" action="javascript:void(0);">
 			<!-- 基础参数设置 -->
 			<div class="layui-card">
-				<div class="layui-card-header">基础连接参数</div>
+				<div class="layui-card-header">
+					基础连接参数
+					<button type="button" class="layui-btn layui-btn-xs layui-btn-normal"
+						style="float: right; margin-top: 10px;" id="addBaseBtn">新增连接</button>
+				</div>
 				<div class="layui-card-body">
 					<table class="layui-table" id="baseConfigTable">
 						<thead>
@@ -785,13 +789,12 @@
 			// 加载基础配置
 			function loadBaseConfig() {
 				$.get('/api/get-base-config', function (res) {
-					if (res.code === 200 && res.data) {
-						// 基础配置表格
-						const baseTbody = $('#baseConfigTable tbody');
-						baseTbody.empty();
+					const baseTbody = $('#baseConfigTable tbody');
+					baseTbody.empty();
+					if (res.code === 200 && res.data && res.data.baseUrl) {
 						baseTbody.append(`
                             <tr>
-                                <td>${res.data.baseUrl || '-'}</td>
+                                <td>${res.data.baseUrl}</td>
                                 <td>${res.data.username || '-'}</td>
                                 <td id="baseConnectStatus">未知</td>
                                 <td>
@@ -800,6 +803,8 @@
                                 </td>
                             </tr>
                         `);
+					} else {
+						baseTbody.append('<tr><td colspan="4" style="text-align: center;">暂无基础连接配置，请点击右上角“新增连接”</td></tr>');
 					}
 				});
 				loadNotificationList();
@@ -951,25 +956,33 @@
 				return false;
 			});
 
-			// 事件委托处理基础配置和通知配置的操作
+			// 基础配置弹窗
+			function openBaseConfigModal(data = {}) {
+				layer.open({
+					type: 1,
+					title: data.baseUrl ? '编辑基础连接参数' : '添加基础连接参数',
+					area: ['500px', '450px'],
+					content: $('#baseConfigModalTpl').html(),
+					success: function (layero, index) {
+						form.val('baseConfigForm', data);
+						form.render(null, 'baseConfigForm');
+
+						// 测试连接按钮
+						layero.find('#testBaseConnectInModal').on('click', function () {
+							testConnection(form.val('baseConfigForm'));
+						});
+					}
+				});
+			}
+
+			$(document).on('click', '#addBaseBtn', function () {
+				openBaseConfigModal({});
+			});
+
 			$(document).on('click', '#editBaseBtn', function () {
 				$.get('/api/get-base-config', function (res) {
 					if (res.code === 200) {
-						layer.open({
-							type: 1,
-							title: '编辑基础连接参数',
-							area: ['500px', '450px'],
-							content: $('#baseConfigModalTpl').html(),
-							success: function (layero, index) {
-								form.val('baseConfigForm', res.data);
-								form.render(null, 'baseConfigForm');
-
-								// 测试连接按钮
-								layero.find('#testBaseConnectInModal').on('click', function () {
-									testConnection(form.val('baseConfigForm'));
-								});
-							}
-						});
+						openBaseConfigModal(res.data);
 					}
 				});
 			});

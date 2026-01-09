@@ -317,13 +317,20 @@
 
 			<!-- 通知配置 -->
 			<div class="layui-card" style="margin-top: 15px;">
-				<div class="layui-card-header">通知配置</div>
+				<div class="layui-card-header">通知配置
+					<button type="button" class="layui-btn layui-btn-xs layui-btn-normal" id="addNotifyBtn"
+						style="float: right; margin-top: 10px;">
+						<i class="layui-icon">&#xe654;</i> 添加通道
+					</button>
+				</div>
 				<div class="layui-card-body">
 					<table class="layui-table" id="notifyConfigTable">
 						<thead>
 							<tr>
-								<th>Bark URL</th>
-								<th>Bark Key</th>
+								<th>名称</th>
+								<th>类型</th>
+								<th>配置预览</th>
+								<th>状态</th>
 								<th>操作</th>
 							</tr>
 						</thead>
@@ -346,7 +353,7 @@
 								<th>ID</th>
 								<th>任务名称</th>
 								<th>同步模式</th>
-								<th>Cron表达式</th>
+								<th>同步路径</th>
 								<th>随机延迟</th>
 								<th>状态/下次运行</th>
 								<th>操作</th>
@@ -499,23 +506,51 @@
         </form>
     </script>
 
-	<!-- 通知配置编辑弹窗模板 -->
-	<script type="text/html" id="notifyConfigModalTpl">
-        <form class="layui-form" id="notifyConfigForm" lay-filter="notifyConfigForm" style="padding: 20px;">
+	<!-- 通知通道编辑弹窗模板 -->
+	<script type="text/html" id="notifyEditModalTpl">
+        <form class="layui-form" id="notifyEditForm" lay-filter="notifyEditForm" style="padding: 20px;">
+            <input type="hidden" name="id">
             <div class="layui-form-item">
-                <label class="layui-form-label">Bark URL</label>
+                <label class="layui-form-label">通道名称</label>
                 <div class="layui-input-block">
-                    <input type="text" name="barkUrl" placeholder="默认为 https://api.day.app" autocomplete="off" class="layui-input">
+                    <input type="text" name="name" required lay-verify="required" placeholder="例如：我的手机Bark" class="layui-input">
                 </div>
             </div>
             <div class="layui-form-item">
-                <label class="layui-form-label">Bark Key</label>
+                <label class="layui-form-label">通道类型</label>
                 <div class="layui-input-block">
-                    <input type="text" name="barkKey" placeholder="请输入Bark Key" autocomplete="off" class="layui-input">
+                    <select name="type" lay-filter="notifyType">
+                        <option value="bark">Bark</option>
+                    </select>
                 </div>
             </div>
+            
+            <div id="notifyConfigFields">
+                <!-- 根据类型动态显示 fields -->
+                <div class="layui-form-item bark-field">
+                    <label class="layui-form-label">Bark URL</label>
+                    <div class="layui-input-block">
+                        <input type="text" name="barkUrl" placeholder="https://api.day.app" class="layui-input">
+                    </div>
+                </div>
+                <div class="layui-form-item bark-field">
+                    <label class="layui-form-label">Bark Key</label>
+                    <div class="layui-input-block">
+                        <input type="text" name="barkKey" placeholder="请输入密钥" class="layui-input">
+                    </div>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">启用状态</label>
+                <div class="layui-input-block">
+                    <input type="checkbox" name="enabled" lay-skin="switch" lay-text="开启|关闭" checked>
+                </div>
+            </div>
+
              <div class="layui-form-item" style="text-align: right;">
-                <button class="layui-btn" lay-submit lay-filter="submitNotifyConfig">保存</button>
+                <button type="button" class="layui-btn layui-btn-warm" id="testNotifyInModal">测试推送</button>
+                <button class="layui-btn" lay-submit lay-filter="submitNotify">保存内容</button>
                 <button type="button" class="layui-btn layui-btn-primary" onclick="layer.closeAll()">取消</button>
             </div>
         </form>
@@ -523,10 +558,8 @@
 	<!-- 操作按钮 -->
 	<div class="layui-form-item" style="margin-top: 15px;">
 		<div class="layui-input-block" style="margin-left: 0; text-align: center;">
-			<button type="button" class="layui-btn" id="saveSyncConfig">保存同步配置</button>
-			<button type="button" class="layui-btn layui-btn-normal" id="runTask">立即执行</button>
+			<button type="button" class="layui-btn layui-btn-normal" id="runAllTasks">立即运行全部任务</button>
 			<button type="button" class="layui-btn layui-btn-primary" id="viewLogs">查看日志</button>
-			<button type="reset" class="layui-btn layui-btn-primary">重置</button>
 			<!-- 新增导入导出按钮 -->
 			<button type="button" class="layui-btn layui-btn-warm" id="exportConfig">导出配置</button>
 			<button type="button" class="layui-btn layui-btn-warm" id="importConfig">导入配置</button>
@@ -657,6 +690,25 @@
 					executeTask(id);
 				});
 
+				$(document).on('click', '#runAllTasks', function () {
+					layer.confirm('确定要立即运行全部同步任务吗？', function (index) {
+						layer.close(index);
+						layer.load(1);
+						$.ajax({
+							url: '/api/run-all-tasks',
+							method: 'POST',
+							success: function (res) {
+								layer.closeAll('loading');
+								layer.msg(res.message);
+							},
+							error: function () {
+								layer.closeAll('loading');
+								layer.msg('请求失败');
+							}
+						});
+					});
+				});
+
 				// 测试连接
 				$('#testConnect').click(function () {
 					const payload = {
@@ -730,7 +782,7 @@
 				}
 			}
 
-			// 加载基础配置和通知配置
+			// 加载基础配置
 			function loadBaseConfig() {
 				$.get('/api/get-base-config', function (res) {
 					if (res.code === 200 && res.data) {
@@ -744,26 +796,160 @@
                                 <td id="baseConnectStatus">未知</td>
                                 <td>
                                     <button class="layui-btn layui-btn-xs" id="editBaseBtn">编辑</button>
-                                    <button class="layui-btn layui-btn-xs layui-btn-gray" id="testBaseConnect">连接测试</button>
-                                </td>
-                            </tr>
-                        `);
-
-						// 通知配置表格
-						const notifyTbody = $('#notifyConfigTable tbody');
-						notifyTbody.empty();
-						notifyTbody.append(`
-                            <tr>
-                                <td>${res.data.barkUrl || '默认'}</td>
-                                <td>${res.data.barkKey ? '********' : '未设置'}</td>
-                                <td>
-                                    <button class="layui-btn layui-btn-xs" id="editNotifyBtn">编辑</button>
+                                    <button class="layui-btn layui-btn-xs layui-btn-normal" id="testBaseConnect">连接测试</button>
                                 </td>
                             </tr>
                         `);
 					}
 				});
+				loadNotificationList();
 			}
+
+			function loadNotificationList() {
+				$.get('/api/notification/list', function (res) {
+					if (res.code === 200) {
+						const tbody = $('#notifyConfigTable tbody');
+						tbody.empty();
+						res.data.forEach(item => {
+							const configPreview = item.type === 'bark' ? (item.config.barkUrl || '默认') : '-';
+							const tr = `
+                                <tr>
+                                    <td>${item.name}</td>
+                                    <td>${item.type.toUpperCase()}</td>
+                                    <td>${configPreview}</td>
+                                    <td>
+                                        <input type="checkbox" name="notif_status" lay-skin="switch" lay-text="开启|关闭" 
+                                            ${item.enabled ? 'checked' : ''} data-id="${item.id}" lay-filter="toggleNotif">
+                                    </td>
+                                    <td>
+                                        <button class="layui-btn layui-btn-xs edit-notif-btn" data-id='${JSON.stringify(item)}'>编辑</button>
+                                        <button class="layui-btn layui-btn-xs layui-btn-danger delete-notif-btn" data-id="${item.id}">删除</button>
+                                    </td>
+                                </tr>
+                            `;
+							tbody.append(tr);
+						});
+						form.render('checkbox');
+					}
+				});
+			}
+
+			// 通知通道操作
+			$('#addNotifyBtn').on('click', function () {
+				openNotifyModal();
+			});
+
+			$(document).on('click', '.edit-notif-btn', function () {
+				const item = $(this).data('id');
+				openNotifyModal(item);
+			});
+
+			$(document).on('click', '.delete-notif-btn', function () {
+				const id = $(this).data('id');
+				layer.confirm('确定要删除个通知通道吗？', function (index) {
+					$.ajax({
+						url: '/api/notification/delete',
+						method: 'POST',
+						contentType: 'application/json',
+						data: JSON.stringify({ id: id }),
+						success: function (res) {
+							layer.msg(res.message);
+							loadNotificationList();
+						}
+					});
+					layer.close(index);
+				});
+			});
+
+			form.on('switch(toggleNotif)', function (obj) {
+				const id = $(obj.elem).data('id');
+				const enabled = obj.elem.checked ? 1 : 0;
+				$.ajax({
+					url: '/api/notification/toggle',
+					method: 'POST',
+					contentType: 'application/json',
+					data: JSON.stringify({ id: id, enabled: enabled }),
+					success: function (res) {
+						if (res.code !== 200) {
+							layer.msg(res.message);
+							loadNotificationList();
+						}
+					}
+				});
+			});
+
+			function openNotifyModal(item = null) {
+				layer.open({
+					type: 1,
+					title: item ? '编辑通知通道' : '添加通知通道',
+					area: ['550px', '450px'],
+					content: $('#notifyEditModalTpl').html(),
+					success: function (layero, index) {
+						if (item) {
+							form.val('notifyEditForm', {
+								id: item.id,
+								name: item.name,
+								type: item.type,
+								barkUrl: item.config.barkUrl,
+								barkKey: item.config.barkKey,
+								enabled: item.enabled
+							});
+						}
+						form.render();
+
+						// 测试按钮
+						layero.find('#testNotifyInModal').on('click', function () {
+							const formData = form.val('notifyEditForm');
+							$.ajax({
+								url: '/api/notification/test',
+								method: 'POST',
+								contentType: 'application/json',
+								data: JSON.stringify({
+									type: formData.type,
+									config: {
+										barkUrl: formData.barkUrl,
+										barkKey: formData.barkKey
+									}
+								}),
+								success: function (res) {
+									layer.msg(res.message, { icon: res.code === 200 ? 1 : 2 });
+								}
+							});
+						});
+					}
+				});
+			}
+
+			form.on('submit(submitNotify)', function (data) {
+				const field = data.field;
+				const payload = {
+					id: field.id,
+					name: field.name,
+					type: field.type,
+					enabled: field.enabled === 'on' ? 1 : 0,
+					config: {
+						barkUrl: field.barkUrl,
+						barkKey: field.barkKey
+					}
+				};
+				const url = payload.id ? '/api/notification/update' : '/api/notification/add';
+				$.ajax({
+					url: url,
+					method: 'POST',
+					contentType: 'application/json',
+					data: JSON.stringify(payload),
+					success: function (res) {
+						if (res.code === 200) {
+							layer.closeAll();
+							layer.msg('保存成功');
+							loadNotificationList();
+						} else {
+							layer.msg(res.message);
+						}
+					}
+				});
+				return false;
+			});
 
 			// 事件委托处理基础配置和通知配置的操作
 			$(document).on('click', '#editBaseBtn', function () {
@@ -894,12 +1080,27 @@
 
 					if (res.code === 200 && res.data && res.data.tasks) {
 						res.data.tasks.forEach(task => {
+							let pathSummary = '';
+							if (task.syncMode === 'data') {
+								pathSummary = `${task.sourceStorage} → ${task.targetStorages.join(', ')} (${task.syncDirs})`;
+							} else if (task.syncMode === 'file' || task.syncMode === 'file_move') {
+								if (task.paths && task.paths.length > 0) {
+									const first = task.paths[0];
+									const src = task.syncMode === 'file' ? first.srcPath : first.srcPathMove;
+									const dst = task.syncMode === 'file' ? first.dstPath : first.dstPathMove;
+									pathSummary = `${src} → ${dst}`;
+									if (task.paths.length > 1) pathSummary += ` 等${task.paths.length}对`;
+								} else {
+									pathSummary = '未配置路径';
+								}
+							}
+
 							const tr = `
                                 <tr>
                                     <td>${task.id || ''}</td>
                                     <td>${task.taskName}</td>
                                     <td>${getSyncModeText(task.syncMode)}</td>
-                                    <td>${task.cron}</td>
+                                    <td title="${pathSummary}" style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${pathSummary}</td>
                                     <td>${task.randomDelay || 0}s</td>
                                     <td class="next-run-time-cell" data-cron="${task.cron}">计算中...</td>
                                     <td>

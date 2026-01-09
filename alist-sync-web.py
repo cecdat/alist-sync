@@ -238,6 +238,14 @@ def migrate_data():
                  # 如果没有文件且数据库没有用户，创建默认用户
                  db_manager.add_user("admin", hash_password("admin"))
 
+        # 通知配置迁移
+        if not db_manager.get_notifications():
+            bark_key = db_manager.get_setting('barkKey')
+            bark_url = db_manager.get_setting('barkUrl')
+            if bark_key:
+                db_manager.add_notification("默认Bark", "bark", {"barkKey": bark_key, "barkUrl": bark_url or "https://api.day.app"}, 1)
+                logger.info("Migrated Bark notification to new table")
+
     except Exception as e:
         logger.error(f"Migration error: {e}")
 
@@ -386,6 +394,71 @@ def delete_task():
         return jsonify({'code': 500, 'message': '任务删除失败'})
     except Exception as e:
         logger.error(f"Delete task failed: {e}")
+        return jsonify({'code': 500, 'message': str(e)})
+
+# 通知管理 API
+@app.route('/api/notification/list', methods=['GET'])
+@login_required
+def list_notifications():
+    return jsonify({'code': 200, 'data': db_manager.get_notifications()})
+
+@app.route('/api/notification/add', methods=['POST'])
+@login_required
+def add_notification():
+    try:
+        data = request.get_json()
+        new_id = db_manager.add_notification(data['name'], data['type'], data['config'], data.get('enabled', 1))
+        return jsonify({'code': 200, 'message': '通知配置添加成功', 'data': {'id': new_id}})
+    except Exception as e:
+        return jsonify({'code': 500, 'message': str(e)})
+
+@app.route('/api/notification/update', methods=['POST'])
+@login_required
+def update_notification():
+    try:
+        data = request.get_json()
+        if db_manager.update_notification(data['id'], data['name'], data['type'], data['config'], data['enabled']):
+            return jsonify({'code': 200, 'message': '通知配置更新成功'})
+        return jsonify({'code': 500, 'message': '通知配置更新失败'})
+    except Exception as e:
+        return jsonify({'code': 500, 'message': str(e)})
+
+@app.route('/api/notification/delete', methods=['POST'])
+@login_required
+def delete_notification():
+    try:
+        data = request.get_json()
+        if db_manager.delete_notification(data['id']):
+            return jsonify({'code': 200, 'message': '通知配置删除成功'})
+        return jsonify({'code': 500, 'message': '通知配置删除失败'})
+    except Exception as e:
+        return jsonify({'code': 500, 'message': str(e)})
+
+@app.route('/api/notification/toggle', methods=['POST'])
+@login_required
+def toggle_notification():
+    try:
+        data = request.get_json()
+        if db_manager.toggle_notification(data['id'], data['enabled']):
+            return jsonify({'code': 200, 'message': '状态更新成功'})
+        return jsonify({'code': 500, 'message': '状态更新失败'})
+    except Exception as e:
+        return jsonify({'code': 500, 'message': str(e)})
+
+@app.route('/api/notification/test', methods=['POST'])
+@login_required
+def test_notification():
+    try:
+        data = request.get_json()
+        notif_type = data.get('type')
+        config = data.get('config', {})
+        
+        if notif_type == 'bark':
+            from alist_sync import send_bark_notification
+            send_bark_notification("Alist-Sync 测试", "这是一条测试通知", config.get('barkKey'), config.get('barkUrl'))
+            return jsonify({'code': 200, 'message': '测试通知已发送，请检查接收情况'})
+        return jsonify({'code': 400, 'message': '不支持的通知类型'})
+    except Exception as e:
         return jsonify({'code': 500, 'message': str(e)})
 
 
@@ -597,10 +670,18 @@ class TaskManager:
             'BASE_URL': base_config.get('baseUrl', ''),
             'USERNAME': base_config.get('username', ''),
             'PASSWORD': base_config.get('password', ''),
-            'TOKEN': base_config.get('token', ''),
-            'BARK_KEY': base_config.get('barkKey', ''),
-            'BARK_URL': base_config.get('barkUrl', '')
+            'TOKEN': base_config.get('token', '')
         })
+
+        # 获取启用的通知配置
+        notifs = db_manager.get_notifications()
+        bark_notif = next((n for n in notifs if n['type'] == 'bark' and n['enabled']), None)
+        if bark_notif:
+            os.environ['BARK_KEY'] = bark_notif['config'].get('barkKey', '')
+            os.environ['BARK_URL'] = bark_notif['config'].get('barkUrl', '')
+        else:
+            if 'BARK_KEY' in os.environ: del os.environ['BARK_KEY']
+            if 'BARK_URL' in os.environ: del os.environ['BARK_URL']
 
     def _execute_single_task(self, task: Dict):
         """执行单个任务"""
@@ -682,6 +763,17 @@ def run_task():
         return jsonify({"code": 500, "message": "同步任务执行失败"})
     except Exception as e:
         logger.error(f"执行任务失败: {str(e)}")
+        return jsonify({"code": 500, "message": f"执行任务时发生错误: {str(e)}"})
+
+@app.route('/api/run-all-tasks', methods=['POST'])
+@login_required
+def run_all_tasks():
+    try:
+        if task_manager.execute_task():
+            return jsonify({"code": 200, "message": "所有同步任务已开始执行"})
+        return jsonify({"code": 500, "message": "任务执行失败或没有配置任务"})
+    except Exception as e:
+        logger.error(f"执行全部任务失败: {str(e)}")
         return jsonify({"code": 500, "message": f"执行任务时发生错误: {str(e)}"})
 
 

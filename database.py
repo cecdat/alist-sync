@@ -51,11 +51,22 @@ class DatabaseManager:
             )
         ''')
         
-        # 用户表（如果需要，从 alist_sync_users_config.json 迁移，为安全/结构与设置分开）
+        # 用户表
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY,
                 password TEXT
+            )
+        ''')
+
+        # 通知配置表
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS notification_configs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                type TEXT, -- e.g., 'bark'
+                config TEXT, -- JSON 字符串存储具体配置
+                enabled INTEGER DEFAULT 1
             )
         ''')
 
@@ -275,4 +286,60 @@ class DatabaseManager:
         cursor.execute('UPDATE users SET password = ? WHERE username = ?', (password, username))
         conn.commit()
         conn.close()
+
+    # 通知相关
+    def get_notifications(self):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM notification_configs')
+        rows = cursor.fetchall()
+        conn.close()
+        notifications = []
+        for row in rows:
+            notif = dict(row)
+            try:
+                notif['config'] = json.loads(notif['config'])
+            except:
+                notif['config'] = {}
+            notifications.append(notif)
+        return notifications
+
+    def add_notification(self, name, type, config, enabled=1):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute(
+            'INSERT INTO notification_configs (name, type, config, enabled) VALUES (?, ?, ?, ?)',
+            (name, type, json.dumps(config), enabled)
+        )
+        new_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return new_id
+
+    def update_notification(self, id, name, type, config, enabled):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE notification_configs SET name = ?, type = ?, config = ?, enabled = ? WHERE id = ?',
+            (name, type, json.dumps(config), enabled, id)
+        )
+        conn.commit()
+        conn.close()
+        return True
+
+    def delete_notification(self, id):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM notification_configs WHERE id = ?', (id,))
+        conn.commit()
+        conn.close()
+        return True
+
+    def toggle_notification(self, id, enabled):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute('UPDATE notification_configs SET enabled = ? WHERE id = ?', (enabled, id))
+        conn.commit()
+        conn.close()
+        return True
 

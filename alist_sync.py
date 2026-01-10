@@ -617,21 +617,23 @@ def get_dir_pairs_from_env() -> List[str]:
 
 
 def main(dir_pairs: str = None, sync_del_action: str = None, exclude_dirs: str = None, move_file: bool = False,
-         regex_patterns: str = None, ):
-    """主函数，用于命令行执行"""
+         regex_patterns: str = None, base_url: str = None, username: str = None, password: str = None, 
+         token: str = None, bark_key: str = None, bark_url: str = None):
+    """主函数，用于执行同步任务"""
     code_souce()
     xiaojin()
 
     logger.info("开始执行同步任务")
-    # 从环境变量获取配置 0
-    base_url = os.environ.get("BASE_URL")
-    username = os.environ.get("USERNAME")
-    password = os.environ.get("PASSWORD")
-    token = os.environ.get("TOKEN")  # 添加token环境变量
+    
+    # 获取基础配置，优先使用参数
+    base_url = base_url or os.environ.get("BASE_URL")
+    username = username or os.environ.get("USERNAME")
+    password = password or os.environ.get("PASSWORD")
+    token = token or os.environ.get("TOKEN")
     
     # 获取Bark配置
-    bark_key = os.environ.get("BARK_KEY")
-    bark_url = os.environ.get("BARK_URL")
+    bark_key = bark_key or os.environ.get("BARK_KEY")
+    bark_url = bark_url or os.environ.get("BARK_URL")
 
     # 是否删除目标目录多余文件
     if sync_del_action:
@@ -693,22 +695,21 @@ def main(dir_pairs: str = None, sync_del_action: str = None, exclude_dirs: str =
     logger.info(
         f"配置信息 - URL: {base_url}, 用户名: {username}, 删除动作: {sync_delete_action}, 删除源目录: {move_file_action}")
         
-    # 发送任务开始通知
-    send_bark_notification("Alist-Sync", "任务开始执行", bark_key, bark_url)
-
     # 创建AlistSync实例时添加token参数
     alist_sync = AlistSync(base_url, username, password, token, sync_delete_action, exclude_list, move_file_action,
                            regex_and_replace_list, regex_pattern)
     # 验证 token 是否正确
     if not alist_sync.login():
         logger.error("令牌或用户名密码不正确")
-        send_bark_notification("Alist-Sync", "任务执行失败：认证未通过", bark_key, bark_url)
         return False
     try:
         # 获取同步目录对
         dir_pairs_list = []
         if dir_pairs:
-            dir_pairs_list.extend(dir_pairs.split(";"))
+            if isinstance(dir_pairs, list):
+                dir_pairs_list.extend(dir_pairs)
+            else:
+                dir_pairs_list.extend(dir_pairs.split(";"))
         else:
             dir_pairs_list = get_dir_pairs_from_env()
 
@@ -735,11 +736,10 @@ def main(dir_pairs: str = None, sync_del_action: str = None, exclude_dirs: str =
             alist_sync.sync_directories(src_dir.strip(), dst_dir.strip())
 
         logger.info("所有同步任务执行完成")
-        send_bark_notification("Alist-Sync", "所有同步任务执行完成", bark_key, bark_url)
+        return True
     except Exception as e:
-        error_msg = f"执行同步任务时发生错误: {str(e)}"
-        logger.error(error_msg)
-        send_bark_notification("Alist-Sync", error_msg, bark_key, bark_url)
+        logger.error(f"执行同步任务时发生错误: {str(e)}")
+        raise e
     finally:
         alist_sync.close()
         logger.info("关闭连接，任务结束")
@@ -788,4 +788,18 @@ def xiaojin():
 
 
 if __name__ == '__main__':
-    main()
+    # 从环境变量获取Bark配置用于独立运行时的通知
+    bark_key = os.environ.get("BARK_KEY")
+    bark_url = os.environ.get("BARK_URL")
+    
+    if bark_key:
+        send_bark_notification("Alist-Sync", "独立任务开始执行", bark_key, bark_url)
+    
+    try:
+        main()
+        if bark_key:
+            send_bark_notification("Alist-Sync", "独立任务执行完成", bark_key, bark_url)
+    except Exception as e:
+        if bark_key:
+            send_bark_notification("Alist-Sync", f"独立任务执行出错: {str(e)}", bark_key, bark_url)
+        raise

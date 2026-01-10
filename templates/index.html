@@ -112,70 +112,101 @@
 		/* 移动端适配样式 */
 		@media screen and (max-width: 768px) {
 			.main-container {
-				width: 95%;
-				margin: 10px auto;
+				width: 100%;
+				margin: 0;
+				padding: 10px;
+				box-sizing: border-box;
 			}
 
-			/* 调整头部按钮位置 */
+			/* 调整头部按钮布局 */
 			.header-btns {
 				position: static;
-				text-align: center;
-				margin: 10px 0;
+				width: 100%;
+				display: flex;
+				justify-content: space-around;
+				margin-bottom: 20px;
+				padding: 0;
 			}
 
 			.header-btns .layui-btn {
-				margin: 5px;
+				margin: 0;
+				flex: 1;
+				margin: 0 5px;
 			}
 
-			/* 调整表单项布局 */
+			.page-header h1 {
+				font-size: 20px;
+			}
+
+			/* 表单适配 */
 			.layui-form-label {
-				width: auto;
-				padding: 9px 0;
-				text-align: left;
-				float: none;
+				width: 100% !important;
+				text-align: left !important;
+				padding: 9px 0 !important;
+				float: none !important;
 			}
 
-			.layui-input-block,
-			.layui-input-inline {
+			.layui-input-block {
 				margin-left: 0 !important;
+				clear: both;
+			}
+
+			/* 表格响应式容器 */
+			.table-responsive {
+				width: 100%;
+				overflow-x: auto;
+				-webkit-overflow-scrolling: touch;
+			}
+
+			.layui-table td,
+			.layui-table th {
+				white-space: nowrap;
+				font-size: 13px;
+				padding: 8px 5px;
+			}
+
+			/* 同步模式单选框 */
+			.layui-form-radio {
+				margin: 2px 0;
+				padding-right: 5px;
+			}
+
+			/* 弹窗适配 */
+			.layui-layer {
+				max-width: 95% !important;
+			}
+
+			/* 路径对适配 */
+			.path-pair-row {
+				border-bottom: 1px dashed #eee;
+				padding-bottom: 15px;
+				margin-bottom: 15px !important;
+			}
+
+			.path-pair-row .layui-inline {
+				display: block !important;
+				margin-right: 0 !important;
+				margin-bottom: 10px !important;
+			}
+
+			.path-pair-row .layui-input {
 				width: 100% !important;
 			}
 
-			/* 调整路径对布局 */
-			.path-pair {
-				display: flex;
-				flex-direction: column;
-				gap: 10px;
+			.path-pair-row .remove-pair-btn {
+				width: 100%;
+			}
+		}
+
+		/* 弹窗通用适配 */
+		@media screen and (max-width: 768px) {
+			.layui-layer-page .layui-layer-content {
+				overflow-x: hidden !important;
 			}
 
-			.path-pair .layui-form-label {
-				padding: 5px 0;
-			}
-
-			.path-pair .layui-input-inline {
-				margin-right: 0;
-			}
-
-			/* 调整按钮组布局 */
-			.layui-form-item .layui-input-block {
-				margin-left: 0;
-				text-align: center;
-			}
-
-			.layui-form-item .layui-input-block .layui-btn {
-				margin: 5px;
-			}
-
-			/* 调整链接组布局 */
-			.link-group {
-				flex-wrap: wrap;
-			}
-
-			/* 调整同步目标差异处置策略布局 */
-			.syncDelAction-group {
-				display: flex;
-				flex-direction: column;
-				gap: 5px;
+			.data-sync-config .layui-form-checkbox[lay-skin=primary] {
+				width: 100%;
+				margin-bottom: 5px;
 			}
 		}
 
@@ -190,14 +221,6 @@
 			text-align: center;
 			padding: 8px 0;
 			color: #999;
-		}
-
-		/* 移动端适配 */
-		@media screen and (max-width: 768px) {
-			.layui-layer {
-				width: 95% !important;
-				left: 2.5% !important;
-			}
 		}
 
 		.version-info {
@@ -215,27 +238,22 @@
 		.regex-tag {
 			display: inline-block;
 			background: #009688;
-			/* 使用 layui 默认按钮颜色 */
 			border: 1px solid #009688;
-			/* 边框颜色 */
 			padding: 2px 8px;
 			margin: 2px;
 			border-radius: 3px;
 			font-size: 12px;
 			color: #fff;
-			/* 文字使用白色 */
 		}
 
 		.regex-tag .close {
 			margin-left: 5px;
 			cursor: pointer;
 			color: #fff;
-			/* 关闭按钮使用白色 */
 		}
 
 		.regex-tag .close:hover {
 			color: #d9d9d9;
-			/* 鼠标悬停时使用浅灰色 */
 		}
 
 		.regex-input {
@@ -253,12 +271,10 @@
 			min-height: 38px;
 			background-color: #fff;
 			transition: border-color 0.3s;
-			/* 添加过渡效果 */
 		}
 
 		.regex-input-container:focus-within {
 			border-color: #009688;
-			/* 输入框获得焦点时边框颜色与按钮一致 */
 		}
 	</style>
 </head>
@@ -303,19 +319,21 @@
 						style="float: right; margin-top: 10px;" id="addBaseBtn">新增连接</button>
 				</div>
 				<div class="layui-card-body">
-					<table class="layui-table" id="baseConfigTable">
-						<thead>
-							<tr>
-								<th>服务地址</th>
-								<th>用户名</th>
-								<th>连接状态</th>
-								<th>操作</th>
-							</tr>
-						</thead>
-						<tbody>
-							<!-- 基础配置将通过JS加载 -->
-						</tbody>
-					</table>
+					<div class="table-responsive">
+						<table class="layui-table" id="baseConfigTable">
+							<thead>
+								<tr>
+									<th>服务地址</th>
+									<th>用户名</th>
+									<th>状态</th>
+									<th>操作</th>
+								</tr>
+							</thead>
+							<tbody>
+								<!-- 基础配置将通过JS加载 -->
+							</tbody>
+						</table>
+					</div>
 				</div>
 			</div>
 
@@ -328,20 +346,22 @@
 					</button>
 				</div>
 				<div class="layui-card-body">
-					<table class="layui-table" id="notifyConfigTable">
-						<thead>
-							<tr>
-								<th>名称</th>
-								<th>类型</th>
-								<th>配置预览</th>
-								<th>状态</th>
-								<th>操作</th>
-							</tr>
-						</thead>
-						<tbody>
-							<!-- 通知配置将通过JS加载 -->
-						</tbody>
-					</table>
+					<div class="table-responsive">
+						<table class="layui-table" id="notifyConfigTable">
+							<thead>
+								<tr>
+									<th>名称</th>
+									<th>类型</th>
+									<th>配置</th>
+									<th>状态</th>
+									<th>操作</th>
+								</tr>
+							</thead>
+							<tbody>
+								<!-- 通知配置将通过JS加载 -->
+							</tbody>
+						</table>
+					</div>
 				</div>
 			</div>
 			<!-- 同步设置 -->
@@ -351,22 +371,24 @@
 						<i class="layui-icon">&#xe654;</i> 添加任务 </button>
 				</div>
 				<div class="layui-card-body">
-					<table class="layui-table" id="taskTable">
-						<thead>
-							<tr>
-								<th>ID</th>
-								<th>任务名称</th>
-								<th>同步模式</th>
-								<th>同步路径</th>
-								<th>随机延迟</th>
-								<th>状态/下次运行</th>
-								<th>操作</th>
-							</tr>
-						</thead>
-						<tbody>
-							<!-- 任务列表将通过JS加载 -->
-						</tbody>
-					</table>
+					<div class="table-responsive">
+						<table class="layui-table" id="taskTable">
+							<thead>
+								<tr>
+									<th>ID</th>
+									<th>任务名称</th>
+									<th>同步模式</th>
+									<th>同步路径</th>
+									<th>随机延迟</th>
+									<th>下次运行</th>
+									<th>操作</th>
+								</tr>
+							</thead>
+							<tbody>
+								<!-- 任务列表将通过JS加载 -->
+							</tbody>
+						</table>
+					</div>
 				</div>
 			</div>
 	</div>
@@ -792,11 +814,18 @@
 					const baseTbody = $('#baseConfigTable tbody');
 					baseTbody.empty();
 					if (res.code === 200 && res.data && res.data.baseUrl) {
+						const status = res.data.base_connect_status || '未知';
+						const lastCheck = res.data.base_connect_last_check || '-';
+						const statusColor = status === '连接正常' ? '#009688' : (status === '未知' ? '#666' : '#FF5722');
+
 						baseTbody.append(`
                             <tr>
                                 <td>${res.data.baseUrl}</td>
                                 <td>${res.data.username || '-'}</td>
-                                <td id="baseConnectStatus">未知</td>
+                                <td id="baseConnectStatus" style="color: ${statusColor}">
+                                    ${status}
+                                    <div style="font-size: 10px; color: #999;">${lastCheck}</div>
+                                </td>
                                 <td>
                                     <button class="layui-btn layui-btn-xs" id="editBaseBtn">编辑</button>
                                     <button class="layui-btn layui-btn-xs layui-btn-normal" id="testBaseConnect">连接测试</button>
@@ -884,10 +913,12 @@
 			});
 
 			function openNotifyModal(item = null) {
+				const isMobile = window.innerWidth <= 768;
 				layer.open({
 					type: 1,
 					title: item ? '编辑通知通道' : '添加通知通道',
-					area: ['550px', '450px'],
+					area: isMobile ? ['95%', 'auto'] : ['550px', '450px'],
+					maxWidth: '100%',
 					content: $('#notifyEditModalTpl').html(),
 					success: function (layero, index) {
 						if (item) {
@@ -958,10 +989,12 @@
 
 			// 基础配置弹窗
 			function openBaseConfigModal(data = {}) {
+				const isMobile = window.innerWidth <= 768;
 				layer.open({
 					type: 1,
 					title: data.baseUrl ? '编辑基础连接参数' : '添加基础连接参数',
-					area: ['500px', '450px'],
+					area: isMobile ? ['95%', 'auto'] : ['500px', '450px'],
+					maxWidth: '100%',
 					content: $('#baseConfigModalTpl').html(),
 					success: function (layero, index) {
 						form.val('baseConfigForm', data);
@@ -998,10 +1031,12 @@
 			$(document).on('click', '#editNotifyBtn', function () {
 				$.get('/api/get-base-config', function (res) {
 					if (res.code === 200) {
+						const isMobile = window.innerWidth <= 768;
 						layer.open({
 							type: 1,
 							title: '编辑通知配置',
-							area: ['500px', '350px'],
+							area: isMobile ? ['95%', 'auto'] : ['500px', '350px'],
+							maxWidth: '100%',
 							content: $('#notifyConfigModalTpl').html(),
 							success: function (layero, index) {
 								form.val('notifyConfigForm', res.data);
@@ -1215,10 +1250,12 @@
 
 			// 打开任务弹窗
 			function openTaskModal(taskData = null) {
+				const isMobile = window.innerWidth <= 768;
 				layer.open({
 					type: 1,
 					title: taskData ? '编辑任务' : '添加任务',
-					area: ['800px', '700px'],
+					area: isMobile ? ['95%', '90%'] : ['800px', '700px'],
+					maxWidth: '100%',
 					content: $('#taskEditModal').html(),
 					success: function (layero, index) {
 						const formElem = layero.find('form');
@@ -1375,10 +1412,10 @@
 				const html = `
                     <div class="layui-form-item path-pair-row">
                         <div class="layui-inline">
-                            <input type="text" placeholder="源目录" class="layui-input src-path" value="${src}" style="width: 200px;">
+                            <input type="text" placeholder="源目录" class="layui-input src-path" value="${src}">
                         </div>
                         <div class="layui-inline">
-                            <input type="text" placeholder="目标目录" class="layui-input dst-path" value="${dst}" style="width: 200px;">
+                            <input type="text" placeholder="目标目录" class="layui-input dst-path" value="${dst}">
                         </div>
                         <div class="layui-inline">
                             <button type="button" class="layui-btn layui-btn-sm layui-btn-danger remove-pair-btn"><i class="layui-icon">&#xe640;</i></button>
@@ -1619,11 +1656,13 @@
 
 			// 导入配置
 			$('#importConfig').on('click', function () {
+				const isMobile = window.innerWidth <= 768;
 				layer.open({
 					type: 1,
 					title: '导入配置',
 					content: $('#importConfigTpl').html(),
-					area: ['600px', '500px'],
+					area: isMobile ? ['95%', 'auto'] : ['600px', '500px'],
+					maxWidth: '100%',
 					success: function (layero, index) {
 						form.render();
 

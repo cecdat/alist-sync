@@ -454,8 +454,7 @@ def test_notification():
         config = data.get('config', {})
         
         if notif_type == 'bark':
-            from alist_sync import send_bark_notification
-            send_bark_notification("Alist-Sync 测试", "这是一条测试通知", config.get('barkKey'), config.get('barkUrl'))
+            alist_sync.send_bark_notification("Alist-Sync 测试", "这是一条测试通知", config.get('barkKey'), config.get('barkUrl'))
             return jsonify({'code': 200, 'message': '测试通知已发送，请检查接收情况'})
         return jsonify({'code': 400, 'message': '不支持的通知类型'})
     except Exception as e:
@@ -550,12 +549,13 @@ def logout():
     return jsonify({'code': 200, 'message': 'success'})
 
 
-# 保存基础连接配置接口
 @app.route('/api/save-base-config', methods=['POST'])
 @login_required
 def save_base_config():
     data = request.get_json()
     if config_manager.save('alist_sync_base_config', data):
+        # 保存成功后立即触发一次连接检查
+        task_manager.check_base_connection()
         return jsonify({"code": 200, "message": "基础配置保存成功"})
     return jsonify({"code": 500, "message": "保存失败"})
 
@@ -624,6 +624,26 @@ class TaskManager:
     def __init__(self, config_manager: ConfigManager):
         self.config_manager = config_manager
 
+    def _send_notification(self, title: str, content: str):
+        """发送通知到所有启用的通道"""
+        try:
+            notifs = db_manager.get_notifications()
+            for notif in notifs:
+                if not notif.get('enabled'):
+                    continue
+                
+                if notif['type'] == 'bark':
+                    config = notif.get('config', {})
+                    alist_sync.send_bark_notification(
+                        title, 
+                        content, 
+                        config.get('barkKey'), 
+                        config.get('barkUrl')
+                    )
+                # 未来可以在这里添加其他通知类型，如 email, telegram 等
+        except Exception as e:
+            logger.error(f"发送推送通知失败: {e}")
+
     def execute_task(self, task_id: Optional[int] = None) -> bool:
         """执行同步任务"""
         try:
@@ -637,8 +657,11 @@ class TaskManager:
                 logger.error("配置为空，无法执行同步任务")
                 return False
 
-            # 设置基础环境变量
-            self._setup_env_vars(base_config)
+            # 获取启用的通知配置用于推送
+            notifs = db_manager.get_notifications()
+            bark_notif = next((n for n in notifs if n['type'] == 'bark' and n['enabled']), None)
+            bark_key = bark_notif['config'].get('barkKey', '') if bark_notif else None
+            bark_url = bark_notif['config'].get('barkUrl', '') if bark_notif else None
 
             # 处理任务
             tasks = sync_config.get('tasks', [])
@@ -650,7 +673,18 @@ class TaskManager:
                 if task_id is not None and task_id != task['id']:
                     continue
 
-                self._execute_single_task(task)
+                task_name = task.get('taskName', '未知任务')
+                self._send_notification("Alist-Sync", f"任务 [{task_name}] 开始执行")
+                
+                try:
+                    success = self._execute_single_task(task, base_config, bark_key, bark_url)
+                    if success:
+                        self._send_notification("Alist-Sync", f"任务 [{task_name}] 执行完成")
+                    else:
+                        self._send_notification("Alist-Sync", f"任务 [{task_name}] 执行失败，请检查日志")
+                except Exception as e:
+                    logger.error(f"执行任务 [{task_name}] 出错: {e}")
+                    self._send_notification("Alist-Sync", f"任务 [{task_name}] 执行异常: {str(e)}")
 
             return True
 
@@ -658,56 +692,38 @@ class TaskManager:
             logger.error(f"执行同步任务失败: {str(e)}")
             return False
 
-    def _setup_env_vars(self, base_config: Dict):
-        """设置环境变量"""
-        # 清除旧的环境变量
-        for key in list(os.environ.keys()):
-            if key.startswith('DIR_PAIRS'):
-                del os.environ[key]
-
-        # 设置新的环境变量
-        os.environ.update({
-            'BASE_URL': base_config.get('baseUrl', ''),
-            'USERNAME': base_config.get('username', ''),
-            'PASSWORD': base_config.get('password', ''),
-            'TOKEN': base_config.get('token', '')
-        })
-
-        # 获取启用的通知配置
-        notifs = db_manager.get_notifications()
-        bark_notif = next((n for n in notifs if n['type'] == 'bark' and n['enabled']), None)
-        if bark_notif:
-            os.environ['BARK_KEY'] = bark_notif['config'].get('barkKey', '')
-            os.environ['BARK_URL'] = bark_notif['config'].get('barkUrl', '')
-        else:
-            if 'BARK_KEY' in os.environ: del os.environ['BARK_KEY']
-            if 'BARK_URL' in os.environ: del os.environ['BARK_URL']
-
-    def _execute_single_task(self, task: Dict):
+    def _execute_single_task(self, task: Dict, base_config: Dict, bark_key: str = None, bark_url: str = None) -> bool:
         """执行单个任务"""
         task_name = task.get('taskName', '未知任务')
         sync_del_action = task.get('syncDelAction', 'none')
         logger.info(f"[{task_name}] 开始处理任务，差异处置策略: {sync_del_action}")
 
-        os.environ['SYNC_DELETE_ACTION'] = sync_del_action
-        os.environ['EXCLUDE_DIRS'] = task.get('excludeDirs', '')
-
-        # 添加正则表达式环境变量
-        if task.get('regexPatterns'):
-            os.environ['REGEX_PATTERNS'] = task.get('regexPatterns')
+        # 构造公共参数
+        common_args = {
+            'base_url': base_config.get('baseUrl', ''),
+            'username': base_config.get('username', ''),
+            'password': base_config.get('password', ''),
+            'token': base_config.get('token', ''),
+            'bark_key': bark_key,
+            'bark_url': bark_url,
+            'sync_del_action': sync_del_action,
+            'exclude_dirs': task.get('excludeDirs', ''),
+            'regex_patterns': task.get('regexPatterns')
+        }
 
         if task['syncMode'] == 'data':
-            self._handle_data_sync(task)
+            return self._handle_data_sync(task, common_args)
         elif task['syncMode'] == 'file':
-            self._handle_file_sync(task)
+            return self._handle_file_sync(task, common_args)
         elif task['syncMode'] == 'file_move':
-            self._handle_file_move(task)
+            return self._handle_file_move(task, common_args)
+        return False
 
-    def _handle_data_sync(self, task: Dict):
+    def _handle_data_sync(self, task: Dict, common_args: Dict) -> bool:
         """处理数据同步模式"""
         source = task['sourceStorage']
         sync_dirs = task['syncDirs']
-        exclude_dirs = task['excludeDirs']
+        exclude_dirs = task.get('excludeDirs', '')
 
         if source not in exclude_dirs:
             exclude_dirs = f'{source}/{exclude_dirs}'
@@ -720,23 +736,50 @@ class TaskManager:
                 dir_pairs.append(dir_pair)
 
         if dir_pairs:
-            os.environ['DIR_PAIRS'] = ';'.join(dir_pairs)
-            alist_sync.main()
+            return alist_sync.main(dir_pairs=dir_pairs, **common_args)
+        return True
 
-    def _handle_file_sync(self, task: Dict):
+    def _handle_file_sync(self, task: Dict, common_args: Dict) -> bool:
         """处理文件同步模式"""
         dir_pairs = [f"{path['srcPath']}:{path['dstPath']}" for path in task['paths']]
         if dir_pairs:
-            os.environ['DIR_PAIRS'] = ';'.join(dir_pairs)
-            alist_sync.main()
+            return alist_sync.main(dir_pairs=dir_pairs, **common_args)
+        return True
 
-    def _handle_file_move(self, task: Dict):
+    def _handle_file_move(self, task: Dict, common_args: Dict) -> bool:
         """处理文件移动模式"""
         dir_pairs = [f"{path['srcPathMove']}:{path['dstPathMove']}" for path in task['paths']]
         if dir_pairs:
-            os.environ['MOVE_FILE'] = 'true'
-            os.environ['DIR_PAIRS'] = ';'.join(dir_pairs)
-            alist_sync.main()
+            common_args['move_file'] = True
+            return alist_sync.main(dir_pairs=dir_pairs, **common_args)
+        return True
+
+    def check_base_connection(self):
+        """检查基础连接状态并保存到数据库"""
+        try:
+            base_config = self.config_manager.load('alist_sync_base_config')
+            if not base_config or not base_config.get('baseUrl'):
+                return
+
+            alist = alist_sync.AlistSync(
+                base_config.get('baseUrl'),
+                base_config.get('username'),
+                base_config.get('password'),
+                base_config.get('token')
+            )
+
+            status = "连接失败"
+            if alist.login():
+                status = "连接正常"
+            
+            alist.close()
+            
+            db_manager.set_setting('base_connect_status', status)
+            db_manager.set_setting('base_connect_last_check', TimeUtils.timestamp_to_datetime(TimeUtils.get_timestamp()))
+            logger.debug(f"基础连接状态检查完成: {status}")
+        except Exception as e:
+            logger.error(f"检查基础连接状态失败: {e}")
+            db_manager.set_setting('base_connect_status', "检查出错")
 
 
 
@@ -854,6 +897,18 @@ class SchedulerManager:
         try:
             self.scheduler.start()
             self.reload_tasks()
+            
+            # 每 60 分钟检查一次基础连接状态
+            self.scheduler.add_job(
+                func=self.task_manager.check_base_connection,
+                trigger='interval',
+                minutes=60,
+                id='check_base_connection',
+                replace_existing=True
+            )
+            # 启动时先执行一次
+            self.task_manager.check_base_connection()
+            
             logger.info("调度器启动成功")
         except Exception as e:
             logger.error(f"调度器启动失败: {e}")

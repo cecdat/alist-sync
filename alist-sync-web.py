@@ -12,6 +12,7 @@ import sys
 from typing import Dict, List, Optional, Any
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from logging.handlers import TimedRotatingFileHandler
 import shutil
 import http.client
@@ -901,8 +902,7 @@ class SchedulerManager:
             # 每 60 分钟检查一次基础连接状态
             self.scheduler.add_job(
                 func=self.task_manager.check_base_connection,
-                trigger='interval',
-                minutes=60,
+                trigger=IntervalTrigger(minutes=60),
                 id='check_base_connection',
                 replace_existing=True
             )
